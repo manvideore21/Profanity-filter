@@ -1,3 +1,10 @@
+**Model Description** 
+Model 1- Aksats Model 
+Model 2- Manvi Model 
+Model 3- Preexisting Model 
+
+
+
 <B> Backend flask application activate</B>
 
 
