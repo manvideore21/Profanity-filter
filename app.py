@@ -8,6 +8,13 @@ import re
 from detoxify import Detoxify
 from bs4 import BeautifulSoup
 from unidecode import unidecode
+import tensorflow as tf
+from tensorflow import keras
+
+from transformers import BertTokenizer
+
+# Initialize the tokenizer with the model's vocabulary
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
 contractionMap = {
     "ain't": "is not",
@@ -132,6 +139,20 @@ contractionMap = {
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://localhost:8080"}})
+
+model_path = 'C:/Users/dhira/Desktop/Profanity-filter/OUTPUT_NAME'  # Adjust to your model directory
+
+tfsmlayer = keras.layers.TFSMLayer(model_path, call_endpoint='serving_default')
+
+# Define input layers according to the SavedModel's expected input
+input_word_ids = keras.Input(shape=(128,), dtype=tf.int32, name="input_word_ids")
+input_mask = keras.Input(shape=(128,), dtype=tf.int32, name="input_mask")
+segment_ids = keras.Input(shape=(128,), dtype=tf.int32, name="all_segment_id")
+
+# Build the model
+outputs = tfsmlayer({'input_word_ids': input_word_ids, 'input_mask': input_mask, 'segment_ids': segment_ids})
+model = keras.Model(inputs=[input_word_ids, input_mask, segment_ids], outputs=outputs)
+
 
 # Load the dataset for Model 1
 def load_dataset_model1():
@@ -283,26 +304,65 @@ def check_comment_toxicity(comment):
 def home():
     return "Hello, this is the home page."
 
+# @app.route('/profanity-check', methods=['POST'])
+# def profanity_check():
+#     data = request.get_json()
+#     text = data['text']
+
+#     # Model 1
+#     model_1_result = detect_profanity_model1(text)
+
+#     # Model 2
+#     model_2_result = check_for_profanity(text)
+
+#     # Toxicity Check
+#     toxicity_result = check_comment_toxicity(text)
+
+#     # Return results as JSON
+#     return jsonify({
+#         'model_1_result': model_1_result,
+#         'model_2_result': model_2_result,
+#         'toxicity_result': toxicity_result
+#     })
+
+def process_sentence(sentence, max_seq_length=128):
+    """Converts a sentence to input format for BERT."""
+    tokens = tokenizer.tokenize(sentence)
+    tokens = ['[CLS]'] + tokens + ['[SEP]']
+    if len(tokens) > max_seq_length - 2:
+        tokens = tokens[:max_seq_length - 2]
+    input_ids = tokenizer.convert_tokens_to_ids(tokens)
+    input_mask = [1] * len(input_ids)
+    segment_ids = [0] * max_seq_length
+
+    # Padding
+    padding_length = max_seq_length - len(input_ids)
+    input_ids += [0] * padding_length
+    input_mask += [0] * padding_length
+
+    return np.array([input_ids]), np.array([input_mask]), np.array([segment_ids])
+
+# def predict_profanity(text):
+#     processed_input = process_input(text)
+#     prediction = loaded_model.predict(processed_input)
+#     return 'Profane' if prediction[0] > 0.5 else 'Not Profane'
+
+
 @app.route('/profanity-check', methods=['POST'])
 def profanity_check():
     data = request.get_json()
     text = data['text']
+    input_word_ids, input_mask, segment_ids = process_sentence(text)
+    
+    predictions = model.predict([input_word_ids, input_mask, segment_ids])
+    
+    profanity_score = predictions[0][0]  # Assuming model outputs a single sigmoid output
+    result = {
+        'profanity_score': float(profanity_score),
+        'is_profane': 'Yes' if profanity_score > 0.5 else 'No'
+    }
+    return jsonify(result)
 
-    # Model 1
-    model_1_result = detect_profanity_model1(text)
-
-    # Model 2
-    model_2_result = check_for_profanity(text)
-
-    # Toxicity Check
-    toxicity_result = check_comment_toxicity(text)
-
-    # Return results as JSON
-    return jsonify({
-        'model_1_result': model_1_result,
-        'model_2_result': model_2_result,
-        'toxicity_result': toxicity_result
-    })
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
