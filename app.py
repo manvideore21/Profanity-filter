@@ -6,19 +6,13 @@ import pandas as pd
 import re
 from bs4 import BeautifulSoup
 from unidecode import unidecode
-from tensorflow.keras.layers import TFSMLayer
 
-# Load the new model
-model = TFSMLayer('C:/Users/91805/Desktop/Profanity-filter/OUTPUT_NAME', call_endpoint='serving_default')
+app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "http://localhost:8080"}})
 
-
-
-# # Load model from C:\Users\91805\Desktop\Profanity-filter\OUTPUT_NAME
-# model_path = "C:/Users/91805/Desktop/Profanity-filter/OUTPUT_NAME"
-# model = tf.keras.layers.load_model(model_path, call_endpoint = "serving_default")
-# model = tf.keras.models.load_model('model_path')
-
-# print(model.summary())
+# model = tf.keras.layers.TFSMLayer("saved_model/my_model", call_endpoint='serving_default')
+model = tf.saved_model.load("saved_model/my_model")
+print(list(model.signatures.keys()))
 
 contractionMap = {
     "ain't": "is not",
@@ -141,10 +135,6 @@ contractionMap = {
     "you've": "you have"
 }
 
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:8080"}})
-
-
 # Preprocessing functions
 def removeHTMLTags(text):
     if pd.isnull(text):
@@ -202,33 +192,53 @@ def preprocess_input(text):
     text = decontract(text)  
     return text
 
-# Modify detect_profanity to use the new layer format
 def detect_profanity(text):
     try:
+        print("Text: ", text)
         print("hit 1")
-
         preprocessed_text = preprocess_input(text)
         preprocessed_text = preprocess_input_special_characters(preprocessed_text)
         print("hit 2")
-        
+
         # Assume the tokenizer and other preprocessing steps remain the same
         tokenizer = tf.keras.preprocessing.text.Tokenizer()
         tokenizer.fit_on_texts([preprocessed_text])
         sequences = tokenizer.texts_to_sequences([preprocessed_text])
         padded_sequences = tf.keras.preprocessing.sequence.pad_sequences(sequences, maxlen=128)  # Adjust maxlen to 128 as per model requirement
-        print("hit 3")
-        # Make predictions using the model
-        predictions = model(padded_sequences)
-        print("hit 4")
-        profanity_score = np.max(predictions.numpy())  # Make sure to convert the tensor output to numpy if necessary
-        print("hit 5")
         
+        print("hit 3")
+
+        input_mask = np.ones_like(padded_sequences)
+        all_segment_id = np.zeros_like(padded_sequences)
+
+        
+
+        # Make predictions using the model
+        predictions = model.signatures['serving_default'](input_word_ids=tf.constant(padded_sequences, dtype=tf.int32),
+                                                          input_mask=tf.constant(input_mask, dtype=tf.int32),
+                                                          all_segment_id=tf.constant(all_segment_id, dtype=tf.int32))
+        
+        print(f"Padded Sequences: {padded_sequences}")
+        print(f"Input Mask: {input_mask}")
+        print(f"All Segment ID: {all_segment_id}")
+
+        print(f"Model Predictions: {predictions}")
+        print("hit 4")
+        
+        profanity_score = predictions['labels'].numpy()[0][0]  # Adjust key to match model's output signature
+        
+        print("hit 5")
+        print(profanity_score)
         if profanity_score > 0.5:
+            print("hit 6 - Profanity Detected")
+
             return "Profanity Detected"
         else:
+            print("hit 7 - No Profanity Detected")
             return "No Profanity Detected"
     except Exception as e:
         print(e)
+        return str(e)
 
 @app.route('/')
 def home():
