@@ -70,9 +70,7 @@ export default {
         // this.result = `Profanity Checker - ${data.profanity_detected ? 'Profanity detected.' : 'No profanity detected.'}`;
         // this.result = `Model 1 - ${data.model_1_result}`;
         
-        this.result = `Model 1 - ${data.model_1_result}
-                      \nModel 2 - ${data.model_2_result}
-                      \ntoxicity_result - ${data.toxicity_result}`;
+        this.result = `Result - ${data.result}`;
       } catch (error) {
         console.error('There was a problem with your fetch operation:', error);
         this.result = 'Error checking for profanity.';

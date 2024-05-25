@@ -6,13 +6,15 @@ import pandas as pd
 import re
 from bs4 import BeautifulSoup
 from unidecode import unidecode
+from transformers import BertTokenizer
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://localhost:8080"}})
 
-# model = tf.keras.layers.TFSMLayer("saved_model/my_model", call_endpoint='serving_default')
+
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+
 model = tf.saved_model.load("saved_model/my_model")
-print(list(model.signatures.keys()))
 
 contractionMap = {
     "ain't": "is not",
@@ -192,53 +194,74 @@ def preprocess_input(text):
     text = decontract(text)  
     return text
 
+# def detect_profanity(text):
+#     try:
+#         print("Text: ", text)
+#         preprocessed_text = preprocess_input(text)
+#         preprocessed_text = preprocess_input_special_characters(preprocessed_text)
+#         print("Preprocessed Text: ", preprocessed_text)
+#         # Assume the tokenizer and other preprocessing steps remain the same
+#         tokenizer = tf.keras.preprocessing.text.Tokenizer()
+#         tokenizer.fit_on_texts([preprocessed_text])
+#         print("Tokenizer: ", tokenizer)
+#         sequences = tokenizer.texts_to_sequences([preprocessed_text])
+#         print("Sequences: ", sequences)
+#         padded_sequences = tf.keras.preprocessing.sequence.pad_sequences(sequences, maxlen=128)
+#         print("Padded Sequences: ", padded_sequences)
+#         # Convert padded_sequences to the correct type
+#         padded_sequences = np.array(padded_sequences, dtype=np.int32)
+
+#         # Create the input dictionary as expected by the model
+#         input_data = {
+#             'input_word_ids': tf.convert_to_tensor(padded_sequences, dtype=tf.int32),
+#             'input_mask': tf.convert_to_tensor(np.ones_like(padded_sequences), dtype=tf.int32),
+#             'all_segment_id': tf.convert_to_tensor(np.zeros_like(padded_sequences), dtype=tf.int32)
+#         }
+
+#         # Use the model to predict
+#         predictions = model(input_data, training=False)
+        
+#         profanity_score = predictions.numpy()[0][0]  # Directly access the tensor value
+
+#         if profanity_score > 0.5:
+#             return "Profanity Detected"
+#         else:
+#             return "No Profanity Detected"
+#     except Exception as e:
+#         print(e)
+#         return str(e)
+
 def detect_profanity(text):
-    try:
-        print("Text: ", text)
-        print("hit 1")
-        preprocessed_text = preprocess_input(text)
-        preprocessed_text = preprocess_input_special_characters(preprocessed_text)
-        print("hit 2")
+    # Tokenize the input text
+    inputs = tokenizer.encode_plus(
+        text,
+        max_length=128,
+        truncation=True,
+        padding='max_length',
+        add_special_tokens=True,
+        return_tensors='tf'
+    )
+    
+    input_word_ids = inputs['input_ids']
+    input_mask = inputs['attention_mask']
+    all_segment_id = inputs['token_type_ids']
+    
+    # Create a dictionary with the expected keys
+    model_inputs = {
+        'input_word_ids': input_word_ids,
+        'input_mask': input_mask,
+        'all_segment_id': all_segment_id
+    }
+    
+    # Make predictions using the model
+    predictions = model(model_inputs, training=False)
+    profanity_score = predictions[0] * 10
+    print(profanity_score)
 
-        # Assume the tokenizer and other preprocessing steps remain the same
-        tokenizer = tf.keras.preprocessing.text.Tokenizer()
-        tokenizer.fit_on_texts([preprocessed_text])
-        sequences = tokenizer.texts_to_sequences([preprocessed_text])
-        padded_sequences = tf.keras.preprocessing.sequence.pad_sequences(sequences, maxlen=128)  # Adjust maxlen to 128 as per model requirement
-        
-        print("hit 3")
-
-        input_mask = np.ones_like(padded_sequences)
-        all_segment_id = np.zeros_like(padded_sequences)
-
-        
-
-        # Make predictions using the model
-        predictions = model.signatures['serving_default'](input_word_ids=tf.constant(padded_sequences, dtype=tf.int32),
-                                                          input_mask=tf.constant(input_mask, dtype=tf.int32),
-                                                          all_segment_id=tf.constant(all_segment_id, dtype=tf.int32))
-        
-        print(f"Padded Sequences: {padded_sequences}")
-        print(f"Input Mask: {input_mask}")
-        print(f"All Segment ID: {all_segment_id}")
-
-        print(f"Model Predictions: {predictions}")
-        print("hit 4")
-        
-        profanity_score = predictions['labels'].numpy()[0][0]  # Adjust key to match model's output signature
-        
-        print("hit 5")
-        print(profanity_score)
-        if profanity_score > 0.5:
-            print("hit 6 - Profanity Detected")
-
-            return "Profanity Detected"
-        else:
-            print("hit 7 - No Profanity Detected")
-            return "No Profanity Detected"
-    except Exception as e:
-        print(e)
-        return str(e)
+    if profanity_score > 0.5:
+        return "Profanity Detected"
+    else:
+        return "No Profanity Detected"
 
 @app.route('/')
 def home():
