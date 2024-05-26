@@ -73,7 +73,7 @@ export default {
         
         // this.result = ` Manvi Model- ${data.model_2_result}
         //                 \nAkshat Model: Profanity Score is- ${data.result}`;
-        this.result = `Manvi Model- ${data.manvi === 'No profanity Detected.'? 'No profanity Detected.' : 'Profanity Detected.'}`;
+        this.result = `Result- ${data.manvi === 'No profanity Detected.'? 'No profanity Detected.' : 'Profanity Detected.'}`;
       } catch (error) {
         console.error('There was a problem with your fetch operation:', error);
         this.result = 'Error checking for profanity.';
