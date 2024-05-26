@@ -7,6 +7,8 @@ import re
 from bs4 import BeautifulSoup
 from unidecode import unidecode
 from transformers import BertTokenizer
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://localhost:8080"}})
@@ -231,6 +233,84 @@ def preprocess_input(text):
 #         print(e)
 #         return str(e)
 
+# Load the dataset for Model 1
+def load_dataset_model1():
+    df = pd.read_csv("Model1.csv")
+    data = []
+    for value in df['Profanity']:
+        for form in ['Canonical Form 1', 'Canonical Form 2', 'Canonical Form 3']:
+            if form in df.columns:
+                canonical_form_values = df[df['Profanity'] == value][form].dropna().unique()
+                for cf_value in canonical_form_values:
+                    if ':' in cf_value:
+                        profanity_word, severity_rating = cf_value.split(':')
+                    else:
+                        profanity_word = cf_value.strip()
+                        severity_rating = str(df[df['Profanity'] == value]['Severity Rating'].iloc[0])
+                    severity_rating = ''.join(filter(str.isdigit, severity_rating))
+                    data.append({'Profanity': profanity_word.strip(), 'Severity Rating': int(severity_rating.strip())})
+    new_df = pd.DataFrame(data)
+    new_df = new_df.drop_duplicates()
+    new_df.reset_index(drop=True, inplace=True)
+    return new_df
+
+# Load the dataset for Model 2
+def load_dataset_model2():
+    df_model2 = pd.read_csv('Mau.csv')
+    profane_words_model2 = df_model2['words'].tolist()
+    return profane_words_model2
+
+# Initialize datasets
+profane_words_model2 = load_dataset_model2()
+new_df_model1 = load_dataset_model1()
+
+# Initialize TfidfVectorizer for Model 1
+tfidf_vectorizer = TfidfVectorizer()
+profanity_vectors = tfidf_vectorizer.fit_transform(new_df_model1['Profanity'])
+
+# Modified detect_profanity function for Model 1
+def detect_profanity_model1(sentence):
+    # Preprocess input text to replace special characters with alphabets
+    sentence = preprocess_input_special_characters(sentence)
+    
+    sentence_tokens = sentence.split()
+    severity_rating = 0
+    profanity_count = 0
+    max_severity_rating = 0
+    for word in sentence_tokens:
+        word_vector = tfidf_vectorizer.transform([word])
+        similarity_scores = cosine_similarity(word_vector, profanity_vectors)
+        max_similarity_score = np.max(similarity_scores)
+        if max_similarity_score > 0.8:
+            profanity_count += 1
+            profanity_word_index = np.argmax(similarity_scores)
+            severity_rating += new_df_model1.loc[profanity_word_index, 'Severity Rating']
+            max_severity_rating = max(max_severity_rating, new_df_model1.loc[profanity_word_index, 'Severity Rating'])
+    if profanity_count > 1:
+        severity_rating += max_severity_rating * (profanity_count - 1)
+    severity_rating = min(severity_rating, 3)
+    if severity_rating == 1:
+        return 'Profanity detected.'
+    elif severity_rating == 2:
+        return 'Profanity detected.'
+    elif severity_rating == 3:
+        return 'Profanity detected.'
+    else:
+        return 'No profanity detected.'
+
+# Check for profanity using Model 2
+def check_for_profanity(text):
+    words = text.split()
+    for word in words:
+        word = word.lower()
+        if word in profane_words_model2:
+            return f'Profanity word "{word}" used.'
+        if re.search(r'\W', word):
+            for profanity_word in profane_words_model2:
+                if len(word) == len(profanity_word) and all(a == b or not a.isalnum() for a, b in zip(word, profanity_word)):
+                    return f'Warning: Obfuscated profanity word "{word}" used.'
+    return "No profanity Detected."
+
 def detect_profanity(text):
     # Tokenize the input text
     inputs = tokenizer.encode_plus(
@@ -277,10 +357,12 @@ def profanity_check():
 
     # Profanity detection
     result = detect_profanity(text)
+    model_2_result = detect_profanity_model1(text)
 
     # Return results as JSON
     return jsonify({
-        'result': result
+        'manvi': model_2_result,
+        'askshat': result
     })
 
 if __name__ == '__main__':
