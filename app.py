@@ -255,13 +255,14 @@ def detect_profanity(text):
     
     # Make predictions using the model
     predictions = model(model_inputs, training=False)
-    profanity_score = predictions[0] * 10
-    print(profanity_score)
+    
+    profanity_score = (predictions[0] * 10).numpy().tolist() 
+    return profanity_score
 
-    if profanity_score > 0.5:
-        return "Profanity Detected"
-    else:
-        return "No Profanity Detected"
+    # if profanity_score > 0.5:
+    #     return "Profanity Detected"
+    # else:
+    #     return "No Profanity Detected"
 
 @app.route('/')
 def home():
