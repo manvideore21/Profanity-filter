@@ -53,7 +53,7 @@ export default {
  methods: {
     async checkProfanity() {
       try {
-        const response = await fetch('http://127.0.0.1:5001/profanity-check', {
+        const response = await fetch('http://127.0.0.1:5000/profanity-check', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
