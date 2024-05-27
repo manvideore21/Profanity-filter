@@ -9,7 +9,7 @@ app = Flask(__name__)
 # CORS(app, resources={r"/*": {"origins": "http://localhost:8080"}})
 CORS(app)
 
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+tokenizer = BertTokenizer.from_pretrained('bert-base-multilingual-cased')
 model = tf.saved_model.load("saved_model/my_model")
 
 # Load the dataset for Model 2
@@ -35,7 +35,6 @@ def check_for_profanity(text):
     return "No profanity Detected."
 
 def detect_profanity(text):
-    # Tokenize the input text
     inputs = tokenizer.encode_plus(
         text,
         max_length=128,
@@ -47,19 +46,16 @@ def detect_profanity(text):
     
     input_word_ids = inputs['input_ids']
     input_mask = inputs['attention_mask']
-    all_segment_id = inputs['token_type_ids']
+    segment_ids = inputs['token_type_ids']
     
-    # Create a dictionary with the expected keys
     model_inputs = {
         'input_word_ids': input_word_ids,
         'input_mask': input_mask,
-        'all_segment_id': all_segment_id
+        'all_segment_id': segment_ids
     }
     
-    # Make predictions using the model
     predictions = model(model_inputs, training=False)
-    
-    profanity_score = (predictions[0] * 10).numpy().tolist() 
+    profanity_score = (predictions[0]).numpy().tolist()
     return profanity_score
 
 @app.route('/')
